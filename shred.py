@@ -1,28 +1,12 @@
 import sys
 import os
-import argparse
 import winreg
 import argparse
 import tkinter as tk
 from tkinter import filedialog
 
-key = winreg.HKEY_CURRENT_USER
-subkey = r"Software\Classes\*\shell\shred_for_non_admin\command"
-
-# dialog = {
-# 'rus' : {
-# 'common' : ['Нажмите "Enter" для подтверждения.\n', 'Что-то пошло не так :(', 'Повторить попытку', ],
-# 'help' : ['Change language to English', 'Установить рограмму', 'Удалить программу', 'Уничтожить файлы', 'Помощь']},
-# 'eng' : {
-# 'short' : ['The program already installed', 'The program successfully removed', 'This file WILL NOT be shreded: ',],
-# 'common' : ['Press "Enter" to confirm.\n', 'Something went wrong :(', 'Try again?', 'Choose add files to shred?'],
-# 'installing' : ['installing the program ...', 'The program installed correctly!', ],
-# 'get_files' : ['Please, choose files to shred: \n', '\nNo any file is selected!', ],
-# 'check_files' : ['I am knowing to shred only files. Can not to shred file: '],
-# 'confirm_shred' : ['\nTotal files to shred: ', '\nAre you sure you want to shred the file', ],
-# 'shredding' : ['\nThe next file was successfully shredded: ', 'This file WAS NOT shredded:', '\nTotal shredded files: ',],
-# 'help' : ['Change for language to russian', 'Install program', 'Remove program', 'Shred files', 'Help']}
-# }
+key = winreg.HKEY_CURRENT_USER # Common for installing and deleting
+subkey = r"Software\Classes\*\shell\shred_for_non_admin\command" # Common for installing and deleting
 
 dialog = {
 'rus' : {
@@ -47,6 +31,16 @@ dialog = dialog['rus'] # Default
 
 
 def get_args():
+
+    '''
+        1) add_mutually_exclusive_group - something 1 of group.
+        2) nargs - coung of possibles subargs.
+        3) metavar - future name for using.
+        4) argparse.SUPPRESS - not add to args if not specifed.
+        5) action = 'store_true' - safe bool type if specifed.
+        6) parser.parse_known_args() -  return tuple of declared args in
+           add.argument, and list of not declared args
+    '''
 
     parser = argparse.ArgumentParser(description =
     'Secure deleting (shred) for windows', epilog = 'Enjoy the program! :)')
@@ -90,7 +84,7 @@ def get_args():
     if len(sys.argv) == 1: # If no args
         parser.print_help()
         args, args.file_from_right_click = parser.parse_known_args(input(
-                                            '\nType arguments: ').split())
+        '\nType arguments: ').split()) # For abling to launch script directly
     else:
         args, args.file_from_right_click = parser.parse_known_args()
     return args
@@ -100,7 +94,7 @@ def process_flags(args):
     if hasattr(args, 'lang'):
         get_lang(args.lang)
     if hasattr(args, 'verbose_help'):
-        print(help) # Help!
+        print(help) # Not yet implemented
     if hasattr(args, 'install'):
         install_program()
     elif hasattr(args, 'remove'):
@@ -127,14 +121,24 @@ def empty_func(*args):
 
 
 def save_output(args):
+
+    '''
+        1) Override progress bar, becouse input not need.
+        2) Save standart print method to built_in_print var.
+        3) Create print_to_file func, that get text, opening file from args,
+           and writes text to it via saved built_in_print var.
+        4) Override standart print for new-created. Now every
+           print it is print_to_file var with predifined output file.
+    '''
+
     global progress_bar
     global print
     progress_bar = empty_func
-    original_print = print
-    def modified_print(*txt):
+    built_in_print = print
+    def print_to_file(*txt):
         with open(args.output_file, 'a') as f:
-            original_print(*txt, file = f)
-    print = modified_print
+            built_in_print(*txt, file = f)
+    print = print_to_file
 
 
 def get_lang(lang = 'eng'):
@@ -204,6 +208,15 @@ def get_files_from_file(file):
 
 
 def get_files(args):
+
+    '''
+        Get files to shred from 1 of 4 sources:
+        1) From context-menu (right click).
+        2) GIU.
+        3) From console.
+        4) From file
+    '''
+
     if args.file_from_right_click:
         files = args.file_from_right_click
     elif hasattr(args, 'gui'):
@@ -215,7 +228,6 @@ def get_files(args):
     else:
         print(dialog['file_warning'][0])
         sys.exit()
-    print(args)
     args.files = files
     return args
 
@@ -223,11 +235,10 @@ def get_files(args):
 def check_files(file_args):
 
     '''
-        This function getting path to files and do next:
         1) Get list files in arg.
         2) Removes spaces from list item.
         3) Checking if list item is file
-        4) Del if not file.
+        4) remove if not file.
         5) Return list files.
     '''
 
@@ -249,11 +260,9 @@ def check_files(file_args):
 def confirm_shred(file_args):
 
     '''
-        This function getting path to files and do next:
         1) Get list files in arg.
         2) Asking for shred confirmation file
-        3) If not - go ro next file
-        4) If repeating - calling itself (recursion)
+        3) If not - remove list item and go to next item (file)
     '''
 
     print(next(dialog['maintree']) + str(len(file_args.files)))
@@ -276,11 +285,11 @@ def confirm_shred(file_args):
 def shredding(file_args):
 
     '''
-    This func do next:
-    1) Get list of files in arg.
-    2) Get size of every files.
-    3) Writes 0 instead every symbol throughout file.
-    4) Repeat the action by the number of cycles.
+    1) Get list of files in args.
+    2) Get cycles count from args.
+    3) Get size of every files.
+    4) Writes 0 instead every symbol throughout file.
+    5) Repeat the action by the number of cycles.
     '''
 
     try:
@@ -292,7 +301,7 @@ def shredding(file_args):
                 null_str = '0' * size
                 for i in range(1, file_args.cycles + 1): # For progress_bar
                     f.write(null_str)
-                    f.seek(0)
+                    f.seek(0) # Go to start of file
                     progress_bar(i, file_args.cycles)
             print()
             print(f'\n{_} {file}')
@@ -309,7 +318,7 @@ def progress_bar(current_cycle, cycles):
     display progress bar
     '''
 
-    gone = '#' # Create every time, put in global namespace or make closure :)
+    gone = '#' # Creating every time, put in global namespace or make closure :)
     left = '-'
     fraction = current_cycle / cycles
     percents = round(fraction * 100)
